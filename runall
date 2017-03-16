@@ -1,0 +1,24 @@
+#!/bin/bash
+
+DIR=../scc_dataset
+
+for input in `ls $DIR`
+do
+#	for APP in './scc' './scc_w' './scc_2_w'
+	for APP in './scc'
+	do
+		echo $APP -t -a a -f $DIR/$input
+		$APP -t -a a -f $DIR/$input
+	done
+done
+
+
+for input in `ls $DIR`
+do
+#	for APP in './scc' './scc_w' './scc_2_w'
+	for APP in './scc_w'
+	do
+		echo $APP -t -a a -f $DIR/$input
+		$APP -t -a a -f $DIR/$input
+	done
+done

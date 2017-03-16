@@ -1,0 +1,9 @@
+usage: ./scc [-t] [-a t/d/l/h] -f graph
+	-t tarjan's algorithm, optional.
+	-a q for topology-driven, d for data-driven, l for load-balance, h for hybrid. topology-driven in default if not specific.
+	-f input directed graph
+
+apps: scc scc_w scc_2_w
+scc:	parallel FB implementation on CUDA
+scc_w:	scc with finding wcc once
+scc_2_w	scc_w with trim_2 once
