@@ -3,12 +3,12 @@
 # Parameters to control Makefile operation
 
 CC = nvcc
-CFLAGS = -arch=compute_20 -code=sm_20 -O3 -w -rdc=true -lineinfo
+CFLAGS = -arch=compute_35 -code=sm_35 -O3 -w -rdc=true -lineinfo
 CUB_DIR=$(HOME)/cub-1.1.1
 # ****************************************************
 # Entries to bring the executable up to date
 
-all: scc scc_w scc_2_w
+all: scc_2_w
 
 scc: scc.cu scc.h load.o tarjan.o timing.o scc_routines.o reach_q.o reach_t.o reach_l.o reach_d.o reach_b.o
 	$(CC) $(CFLAGS) -o scc scc.cu load.o tarjan.o timing.o scc_routines.o reach_q.o reach_t.o reach_b.o reach_l.o reach_d.o -I $(CUB_DIR)

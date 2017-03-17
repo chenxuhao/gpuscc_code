@@ -281,6 +281,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 		/*=== fwd & bwd reach */
 		switch(opt.alg) {
 			case QUADRATIC:
+			printf("running QUADRATIC strategy\n");
 			#ifdef WCC
 				if (!wcc_done) 
 					t_fwd = time_fwd;
@@ -344,6 +345,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 				break;
 			
 			case TOPO:
+			printf("running TOPO strategy\n");
 			#ifdef WCC
 				if (!wcc_done) 
 					t_fwd = time_fwd;
@@ -437,6 +439,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 				break;
 
 			case LINEAR:
+			printf("running LINEAR strategy\n");
 			if (step == 1) {
 				wl.pushHost(firstPivot);
 			}
@@ -485,6 +488,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 				break;
 
 			case HYBRID:
+			printf("running HYBRID strategy\n");
 				#if 0
 				if(step != 1 && n_elimmed < (countOfNodes / 100)) {
 					setGridDimension(&dimGrid, countOfNodes, 1024);
@@ -556,6 +560,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 				break;						
 
 			case COMBINE:
+			printf("running COMBINE strategy\n");
 			if (step == 1) {
 				wl.pushHost(firstPivot);
 			}
@@ -631,6 +636,7 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 
 
 			case BEST:
+				printf("running BEST strategy\n");
 				if (n_elimmed < (countOfNodes / 100)) {
 					printf("best reach_t\n");
 			#ifdef WCC
@@ -648,7 +654,8 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 				*/
 				#else
 					if (step == 1) {
-						STOPWATCH( temp = fwd_reach1_b(d_nodes, countOfNodes, d_edges, countOfEdges, d_states, opt, degree, firstPivot), time_fwd );
+						STOPWATCH( temp = fwd_reach1_b(d_nodes, d_nodesT, countOfNodes, d_edges, d_edgesT, countOfEdges, d_states, opt, degree, firstPivot), time_fwd );
+						//STOPWATCH( temp = fwd_reach1_b(d_nodes, countOfNodes, d_edges, countOfEdges, d_states, opt), time_fwd );
 					}
 					else {
 						STOPWATCH( temp = fwd_reach_b(d_nodes, countOfNodes, d_edges, countOfEdges, d_ranges, d_states, opt), time_fwd );

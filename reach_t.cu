@@ -478,7 +478,7 @@ static __global__ void bwd_step1(unsigned *nodes, unsigned *edges, unsigned char
 static __global__ void fwd_step1(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, bool volatile *end, unsigned *scc_root) {
 #else
 //static __global__ void fwd_step(unsigned *nodes, unsigned *edges, unsigned *ranges, unsigned char *states, unsigned countOfNodes, bool volatile *end) {
-static __global__ void fwd_step1(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, bool volatile *end) {
+static __global__ void fwd_step1(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, bool volatile *end, int *frontier_size) {
 #endif
 
 	unsigned id = blockDim.x * blockIdx.x + threadIdx.x + 1;
@@ -602,6 +602,7 @@ static __global__ void fwd_step1(unsigned *nodes, unsigned *edges, unsigned char
 					scc_root[dst] = scc_root[src];
 				#endif
 					setFVis(&states[dst]);
+				atomicAdd(frontier_size,1);
 					sh_end = false;
 				}
 			//}
@@ -670,13 +671,16 @@ unsigned fwd_reach1_t(unsigned *d_nodes, unsigned countOfNodes, unsigned *d_edge
 #ifdef DEBUG
 	timeval timer;
 #endif
-	
+	int h_frontier_size = 0;
+	int zero = 0;
+	int *d_frontier_size;
+	gpuErrchk( cudaMalloc((void **)&d_frontier_size, sizeof(int)));
 	setGridDimension(&dimGrid, countOfNodes, opt.block_size);
-	
 	gpuErrchk( cudaMalloc((void**)&d_end, sizeof(*d_end)) );
 	
 	while(!end) {
 		gpuErrchk( cudaMemset((void *)d_end, true, sizeof(*d_end)) ); 
+		gpuErrchk( cudaMemcpy(d_frontier_size, &zero, sizeof(int), cudaMemcpyHostToDevice));
 	#ifdef DEBUG
 		startTimer(&timer);
 	#endif
@@ -685,13 +689,15 @@ unsigned fwd_reach1_t(unsigned *d_nodes, unsigned countOfNodes, unsigned *d_edge
 		fwd_step1<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, d_end, scc_root);
 	#else
 		//fwd_step<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_ranges, d_states, countOfNodes, d_end);
-		fwd_step1<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, d_end);
+		fwd_step1<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, d_end, d_frontier_size);
 	#endif
 		gpuErrchk( cudaMemcpy(&end, (void *)d_end, sizeof(*d_end), cudaMemcpyDeviceToHost) );		
+		gpuErrchk( cudaMemcpy(&h_frontier_size, (void *)d_frontier_size, sizeof(int), cudaMemcpyDeviceToHost) );
 	#ifdef DEBUG
 		printf("fwd iteration %d time:%f ms\n", depth + 1, stopTimer(&timer) / 1000.0);
 	#endif
 		depth++;
+		printf("iteration=%d, frontier_size=%d\n", depth, h_frontier_size);
 	}
 	
 	gpuErrchk( cudaFree((void *) d_end) );

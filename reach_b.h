@@ -6,8 +6,8 @@
 //#ifdef VERIFY
 //unsigned fwd_reach1_b(unsigned *nodes, unsigned countOfNodes, unsigned *edges, unsigned countOfEdges, unsigned char *states, alg_opt opt, unsigned *scc_root);
 //#else
-//unsigned fwd_reach1_t(unsigned *nodes, unsigned countOfNodes, unsigned *edges, unsigned countOfEdges, unsigned char *states, alg_opt opt);
-unsigned fwd_reach1_b(unsigned *nodes, unsigned countOfNodes, unsigned *edges, unsigned countOfEdges, unsigned char *states, alg_opt opt, int *h_degree, int source);
+//unsigned fwd_reach1_b(unsigned *nodes, unsigned countOfNodes, unsigned *edges, unsigned countOfEdges, unsigned char *states, alg_opt opt);
+unsigned fwd_reach1_b(unsigned *nodes, unsigned *nodesT, unsigned countOfNodes, unsigned *edges, unsigned *edgesT, unsigned countOfEdges, unsigned char *states, alg_opt opt, int *h_degree, int source);
 //#endif
 				
 unsigned bwd_reach1_b(unsigned *nodes, unsigned countOfNodes, unsigned *edges, unsigned countOfEdges, unsigned char *states, alg_opt opt);
