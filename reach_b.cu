@@ -371,23 +371,6 @@ static __global__ void fwd_step1(unsigned *nodes, unsigned *edges, unsigned char
 }
 //*/
 
-unsigned bwd_reach1_b(unsigned *d_nodes, unsigned countOfNodes, unsigned *d_edges, unsigned countOfEdges, unsigned char *d_states, alg_opt opt) {
-	bool volatile *d_end;
-	bool end = false;
-	unsigned depth = 0;
-	dim3 dimGrid;
-	setGridDimension(&dimGrid, countOfNodes, opt.block_size);
-	gpuErrchk( cudaMalloc((void**)&d_end, sizeof(*d_end)) );
-	while(!end) {
-		gpuErrchk( cudaMemset((void *)d_end, true, sizeof(*d_end)) ); // prerobit <<< >>> aj na mnoho vrcholov
-		bwd_step1<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, d_end);
-		gpuErrchk( cudaMemcpy(&end, (void *)d_end, sizeof(*d_end), cudaMemcpyDeviceToHost) );
-		depth++;
-	}
-	gpuErrchk( cudaFree((void *) d_end) );
-	return depth;
-}
-
 //top-down kernel
 static __global__ void fwd_step1_td(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, int *scout_count, int *degree, Worklist2 inwl, Worklist2 outwl) {
 	unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -402,6 +385,25 @@ static __global__ void fwd_step1_td(unsigned *nodes, unsigned *edges, unsigned c
 		dst = edges[ii];
 		if ((states[dst] & 6) == 0) {
 			setFVis(&states[dst]);
+			outwl.push(dst);
+			atomicAdd(scout_count, degree[dst]);
+		}
+	}
+}
+
+static __global__ void bwd_step1_td(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, int *scout_count, int *degree, Worklist2 inwl, Worklist2 outwl) {
+	unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned nn; 
+	if (!inwl.pop_id(id, nn))
+		return;
+	setFExt(&states[nn]);
+	unsigned my_start = nodes[nn];
+	unsigned my_end = nodes[nn + 1]; 
+	unsigned dst;
+	for (unsigned ii = my_start; ii < my_end; ++ii) {
+		dst = edges[ii];
+		if ((states[dst] & 5) == 0) {
+			setBVis(&states[dst]);
 			outwl.push(dst);
 			atomicAdd(scout_count, degree[dst]);
 		}
@@ -437,6 +439,24 @@ static __global__ void fwd_step1_bu(unsigned *nodes, unsigned *edges, unsigned c
 			if(front[dst] == 1) { // if dst is in the frontier (visited but not extended)
 				//printf("src=%d, dst=%d\n", id, dst);
 				setFVis(&states[id]);
+				next[id] = 1;
+				//atomicAdd(frontier_size,1);
+			}
+		}
+	}
+}
+
+static __global__ void bwd_step1_bu(unsigned *nodes, unsigned *edges, unsigned char *states, unsigned countOfNodes, int *front, int *next, int *frontier_size) {
+	unsigned id = blockDim.x * blockIdx.x + threadIdx.x + 1;
+	if(id > countOfNodes) return;
+	if((states[id] & 5) == 0) { // if it is not visited
+		unsigned my_start = nodes[id];
+		unsigned my_end = nodes[id + 1];
+		for(unsigned i = my_start; i < my_end; i++) {
+			unsigned dst = edges[i];
+			if(front[dst] == 1) { // if dst is in the frontier (visited but not extended)
+				//printf("src=%d, dst=%d\n", id, dst);
+				setBVis(&states[id]);
 				next[id] = 1;
 				//atomicAdd(frontier_size,1);
 			}
@@ -540,8 +560,100 @@ unsigned fwd_reach1_b(unsigned *d_nodes, unsigned *d_nodesT, unsigned countOfNod
 			printf("TD: iteration=%d, num_frontier=%d\n", depth, nitems);
 		}
 	} while (nitems > 0);
+	gpuErrchk(cudaDeviceSynchronize());
 	gpuErrchk(cudaFree(d_scout_count));
 	//gpuErrchk( cudaFree((void *) d_end) );
+	return depth;
+}
+//*/
+///*
+unsigned bwd_reach1_b(unsigned *d_nodes, unsigned *d_nodesT, unsigned countOfNodes, unsigned *d_edges, unsigned *d_edgesT, unsigned countOfEdges, unsigned char *d_states, alg_opt opt, int *h_degree, int source) {
+	unsigned depth = 0;
+	dim3 dimGrid;
+
+	Worklist2 queue1(countOfEdges), queue2(countOfEdges);
+	Worklist2 *in_frontier = &queue1, *out_frontier = &queue2;
+	int *front, *next;
+	int zero = 0;
+	int alpha = 15, beta = 18;
+	int nitems = 1;
+	int edges_to_check = countOfEdges;
+	int scout_count = h_degree[source];
+	int *d_scout_count, *d_frontier_size;
+	int *d_degree;
+	CUDA_SAFE_CALL(cudaMalloc((void **)&d_scout_count, sizeof(int)));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&d_frontier_size, sizeof(int)));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&d_degree, (countOfNodes+1) * sizeof(int)));
+	CUDA_SAFE_CALL(cudaMemcpy(d_degree, h_degree, (countOfNodes+1) * sizeof(int), cudaMemcpyHostToDevice));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&front, (countOfNodes+1) * sizeof(int)));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&next, (countOfNodes+1) * sizeof(int)));
+	CUDA_SAFE_CALL(cudaMemset(front, 0, (countOfNodes+1) * sizeof(int)));
+	CUDA_SAFE_CALL(cudaMemset(next, 0, (countOfNodes+1) * sizeof(int)));
+	insert<<<1, 32>>>(source, *in_frontier);
+
+	do {
+		if(scout_count > edges_to_check / alpha) {
+		//if(1) {
+			int awake_count, old_awake_count;
+			QueueToBitmap<<<((countOfNodes-1)/512+1), 512>>>(countOfNodes, *in_frontier, front);
+			awake_count = nitems;
+			do {
+				depth++;
+				old_awake_count = awake_count;
+				setGridDimension(&dimGrid, countOfNodes, opt.block_size);
+				//gpuErrchk(cudaMemcpy(d_frontier_size, &zero, sizeof(int), cudaMemcpyHostToDevice));
+				bwd_step1_bu<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, front, next, d_frontier_size);
+				//gpuErrchk( cudaMemcpy(&awake_count, (void *)d_frontier_size, sizeof(int), cudaMemcpyDeviceToHost) );
+				awake_count = thrust::reduce(thrust::device, next + 1, next + countOfNodes + 1, 0, thrust::plus<int>());
+				printf("BU: iteration=%d, num_frontier=%d\n", depth, awake_count);
+				int *temp = front;
+				front = next;
+				next = temp;
+				thrust::fill(thrust::device, next, next + countOfNodes + 1, 0);
+			} while((awake_count >= old_awake_count) || (awake_count > countOfNodes / beta));
+			//} while(awake_count>0);
+			nitems = awake_count;
+			scout_count = 1;
+			in_frontier->clearHost();
+			BitmapToQueue<<<((countOfNodes-1)/512+1), 512>>>(countOfNodes, front, *in_frontier);
+		} else{ 
+			depth++;
+			edges_to_check -= scout_count;
+			nitems = in_frontier->getSize();
+			setGridDimension(&dimGrid, nitems, opt.block_size);
+			CUDA_SAFE_CALL(cudaMemcpy(d_scout_count, &zero, sizeof(int), cudaMemcpyHostToDevice));
+			bwd_step1_td<<<dimGrid, BLKSIZE>>>(d_nodesT, d_edgesT, d_states, countOfNodes, d_scout_count, d_degree, *in_frontier, *out_frontier);
+			CUDA_SAFE_CALL(cudaMemcpy(&scout_count, d_scout_count, sizeof(int), cudaMemcpyDeviceToHost));
+			//nitems = out_frontier->nitems();
+			nitems = out_frontier->getSize();
+			Worklist2 *tmp = in_frontier;
+			in_frontier = out_frontier;
+			out_frontier = tmp;
+			//out_frontier->reset();
+			out_frontier->clearHost();
+			printf("TD: iteration=%d, num_frontier=%d\n", depth, nitems);
+		}
+	} while (nitems > 0);
+	gpuErrchk(cudaFree(d_scout_count));
+	return depth;
+}
+//*/
+
+/*
+unsigned bwd_reach1_b(unsigned *d_nodes, unsigned *d_nodesT, unsigned countOfNodes, unsigned *d_edges, unsigned *d_edgesT, unsigned countOfEdges, unsigned char *d_states, alg_opt opt, int *h_degree, int source) {
+	bool volatile *d_end;
+	bool end = false;
+	unsigned depth = 0;
+	dim3 dimGrid;
+	setGridDimension(&dimGrid, countOfNodes, opt.block_size);
+	gpuErrchk( cudaMalloc((void**)&d_end, sizeof(*d_end)) );
+	while(!end) {
+		gpuErrchk( cudaMemset((void *)d_end, true, sizeof(*d_end)) ); // prerobit <<< >>> aj na mnoho vrcholov
+		bwd_step1<<<dimGrid, opt.block_size>>>(d_nodes, d_edges, d_states, countOfNodes, d_end);
+		gpuErrchk( cudaMemcpy(&end, (void *)d_end, sizeof(*d_end), cudaMemcpyDeviceToHost) );
+		depth++;
+	}
+	gpuErrchk( cudaFree((void *) d_end) );
 	return depth;
 }
 //*/

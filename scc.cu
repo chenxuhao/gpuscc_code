@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
 	
 	if (opt.alg == ALL) {
 		//for (int i = QUADRATIC; i <= HYBRID; i++) { 
-		for (int i = QUADRATIC; i <= COMBINE; i++) { 
+		for (int i = QUADRATIC; i <= BEST; i++) { 
 			opt.alg = (reach_strategy)i;	
 			printf("computing SCC in parallel - alg: %d...\n", opt.alg);
 	
@@ -219,8 +219,11 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 	states = (unsigned char*)malloc((countOfNodes + 1) * sizeof(*states));
 	unsigned firstPivot = 0;
 	int *degree = (int *)malloc((countOfNodes + 1) * sizeof(int));
+	int *degreeT = (int *)malloc((countOfNodes + 1) * sizeof(int));
 	degree[0] = 0;
+	degreeT[0] = 0;
 	for (int i = 1; i < (countOfNodes + 1); i++) degree[i] = nodes[i + 1] - nodes[i]; 
+	for (int i = 1; i < (countOfNodes + 1); i++) degreeT[i] = nodesT[i + 1] - nodesT[i]; 
 		
 #ifdef TRIM_FIRST
 	#ifdef VERIFY
@@ -673,14 +676,15 @@ pair <unsigned, float> computeSCC(unsigned countOfNodes, unsigned countOfEdges, 
 					t_bwd = time_bwd;
 			#endif
 					if (step == 1) {
-						STOPWATCH( temp = bwd_reach1_b(d_nodesT, countOfNodes, d_edgesT, countOfEdges, d_states, opt), time_bwd );
+						STOPWATCH( temp = bwd_reach1_b(d_nodes, d_nodesT, countOfNodes, d_edges, d_edgesT, countOfEdges, d_states, opt, degreeT, firstPivot), time_bwd );
+						//STOPWATCH( temp = bwd_reach1_b(d_nodesT, countOfNodes, d_edgesT, countOfEdges, d_states, opt), time_bwd );
 					}
 					else {
 						STOPWATCH( temp = bwd_reach_b(d_nodesT, countOfNodes, d_edgesT, countOfEdges, d_ranges, d_states, opt), time_bwd );
 					}
 			#ifdef WCC
 				if (!wcc_done) { 
-					printf("bwd time of step %d is %f ms\n", step, (time_bwd - t_bwd) / 1000.0);
+					printf("best bwd time of step %d is %f ms\n", step, (time_bwd - t_bwd) / 1000.0);
 				}
 			#endif
 					bwdDepths += temp;	

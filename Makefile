@@ -3,7 +3,7 @@
 # Parameters to control Makefile operation
 
 CC = nvcc
-CFLAGS = -arch=compute_35 -code=sm_35 -O3 -w -rdc=true -lineinfo
+CFLAGS = -arch=compute_20 -code=sm_20 -O3 -w -rdc=true -lineinfo
 CUB_DIR=$(HOME)/cub-1.1.1
 # ****************************************************
 # Entries to bring the executable up to date
