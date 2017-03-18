@@ -483,7 +483,7 @@ unsigned fwd_reach1_b(unsigned *d_nodes, unsigned *d_nodesT, unsigned countOfNod
 	int zero = 0;
 	int alpha = 15, beta = 18;
 	int nitems = 1;
-	int edges_to_check = countOfNodes;
+	int edges_to_check = countOfEdges;
 	int scout_count = h_degree[source];
 	int *d_scout_count, *d_frontier_size;
 	int *d_degree;
